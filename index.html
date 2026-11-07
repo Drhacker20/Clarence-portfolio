@@ -489,6 +489,8 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
   var EMAIL='raysonbayan15@gmail.com';
   var ENDPOINT='https://formsubmit.co/ajax/'+EMAIL;
   var KEY='cv_reaction_done';
+  /* Paste your Web3Forms access key here (free, from web3forms.com). If empty, FormSubmit is used instead. */
+  var W3F_KEY='';
   var TEST=/[?&]rxtest\b/.test(location.search);
   var box=document.getElementById('rx'),toast=document.getElementById('rxToast');
   if(!box)return;
@@ -515,7 +517,7 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
     f.style.setProperty('--dx',(Math.random()*60-30)+'px');
     document.body.appendChild(f);setTimeout(function(){f.remove()},1000);
   }
-  if(TEST){try{localStorage.removeItem(KEY)}catch(e){}log('TEST MODE\nprotocol: '+location.protocol+'\nsending to: '+EMAIL+'\nPress a reaction, then read the reply here.')}
+  if(TEST){try{localStorage.removeItem(KEY)}catch(e){}log('TEST MODE\nprovider: '+(W3F_KEY?'Web3Forms':'FormSubmit')+'\nprotocol: '+location.protocol+'\nsending to: '+EMAIL+'\nPress a reaction, then read the reply here.')}
   else{var done=get();if(done)lock(done)}
 
   function send(kind,emoji){
@@ -528,7 +530,12 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
       Time:new Date().toLocaleString(),
       Page:location.href
     };
-    return fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)})
+    var payload=body,url=ENDPOINT;
+    if(W3F_KEY){
+      url='https://api.web3forms.com/submit';
+      payload={access_key:W3F_KEY,subject:body._subject,from_name:'Portfolio Reactions',Reaction:body.Reaction,message:body.Message+'\nTime: '+body.Time+'\nPage: '+body.Page,botcheck:''};
+    }
+    return fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(payload)})
       .then(function(r){
         return r.text().then(function(t){
           var d={};try{d=JSON.parse(t)}catch(e){}
