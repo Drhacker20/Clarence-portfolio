@@ -227,6 +227,8 @@ h2{background:linear-gradient(var(--blue),var(--blue)) left bottom/0 3px no-repe
 #rx .rxlbl.done{animation:none;background:rgba(77,255,176,.14);color:#4dffb0;border:1px solid rgba(77,255,176,.4)}
 @keyframes rxpulse{0%{box-shadow:0 0 0 0 rgba(255,61,139,.55)}70%,100%{box-shadow:0 0 0 12px rgba(255,61,139,0)}}
 @keyframes rxnudge{50%{transform:translateX(4px)}}
+#rxDbg{position:fixed;left:.7rem;right:.7rem;bottom:calc(5.2rem + env(safe-area-inset-bottom,0px));z-index:80;max-height:34vh;overflow:auto;background:#000d;color:#4dffb0;border:1px solid var(--line);border-radius:10px;padding:.6rem .75rem;font:500 .68rem/1.5 var(--mono);white-space:pre-wrap;word-break:break-all;user-select:text;-webkit-user-select:text}
+#rxDbg.err{color:#ff8a8a}
 #rx .ct{min-width:1ch;color:var(--cy)}
 #rxToast{position:fixed;right:max(.9rem,env(safe-area-inset-right,0px));bottom:calc(4.6rem + env(safe-area-inset-bottom,0px));z-index:60;font:500 .72rem var(--mono);color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.35rem .6rem;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;pointer-events:none}
 #rxToast.show{opacity:1;transform:none}
@@ -481,16 +483,24 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
 </script>
 
 <script>
-/* reactions -> emails raysonbayan15@gmail.com (TEST) via FormSubmit. ONE reaction per visitor (per browser). */
+/* reactions -> emails raysonbayan15@gmail.com (TEST) via FormSubmit.
+   ONE reaction per visitor (per browser). Add ?rxtest=1 to the URL to test: no lock + shows the raw server reply. */
 (function(){
-  var ENDPOINT='https://formsubmit.co/ajax/raysonbayan15@gmail.com';
+  var EMAIL='raysonbayan15@gmail.com';
+  var ENDPOINT='https://formsubmit.co/ajax/'+EMAIL;
   var KEY='cv_reaction_done';
+  var TEST=/[?&]rxtest\b/.test(location.search);
   var box=document.getElementById('rx'),toast=document.getElementById('rxToast');
   if(!box)return;
-  var btns=[].slice.call(box.querySelectorAll('button[data-r]')),busy=false,tt;
+  var btns=[].slice.call(box.querySelectorAll('button[data-r]')),busy=false,tt,dbg;
   function get(){try{return localStorage.getItem(KEY)}catch(e){return null}}
   function set(v){try{localStorage.setItem(KEY,v)}catch(e){}}
   function say(t,ms){toast.textContent=t;toast.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toast.classList.remove('show')},ms||2200)}
+  function log(t,isErr){
+    if(!TEST)return;
+    if(!dbg){dbg=document.createElement('div');dbg.id='rxDbg';document.body.appendChild(dbg)}
+    dbg.className=isErr?'err':'';dbg.textContent=t;
+  }
   function lock(kind){
     btns.forEach(function(b){
       b.disabled=true;
@@ -505,7 +515,8 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
     f.style.setProperty('--dx',(Math.random()*60-30)+'px');
     document.body.appendChild(f);setTimeout(function(){f.remove()},1000);
   }
-  var done=get();if(done)lock(done);
+  if(TEST){try{localStorage.removeItem(KEY)}catch(e){}log('TEST MODE\nprotocol: '+location.protocol+'\nsending to: '+EMAIL+'\nPress a reaction, then read the reply here.')}
+  else{var done=get();if(done)lock(done)}
 
   function send(kind,emoji){
     var label=kind==='heart'?'Heart':'Haha';
@@ -518,27 +529,36 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
       Page:location.href
     };
     return fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)})
-      .then(function(r){return r.json().catch(function(){return {}}).then(function(d){return {ok:r.ok,d:d}})})
+      .then(function(r){
+        return r.text().then(function(t){
+          var d={};try{d=JSON.parse(t)}catch(e){}
+          log('HTTP '+r.status+'\n'+t.slice(0,600));
+          return {ok:r.ok,d:d,raw:t};
+        });
+      })
       .then(function(x){
         var ok=x.ok&&(x.d.success===true||x.d.success==='true');
-        if(!ok){var e=new Error(x.d.message||'failed');e.fs=x.d.message||'';throw e}
+        if(!ok){var e=new Error(x.d.message||('HTTP error '+(x.raw||'').slice(0,120)));e.fs=x.d.message||'';throw e}
         return x.d;
       });
   }
 
   box.addEventListener('click',function(e){
     var b=e.target.closest('button[data-r]');if(!b||b.disabled||busy)return;
-    if(location.protocol==='file:'){say('Buksan sa deployed site (Vercel), hindi sa file.',3500);return}
+    if(location.protocol==='file:'){say('Buksan sa deployed site (Vercel), hindi sa file.',3500);log('ERROR: page opened from file:// - FormSubmit will not work. Use the Vercel link.',true);return}
     var kind=b.dataset.r,emoji=b.dataset.e;
-    busy=true;btns.forEach(function(x){x.disabled=true});
-    send(kind,emoji).then(function(){
-      set(kind);lock(kind);fly(b,emoji);say('Thanks! Sent '+emoji+' to Clarence');
+    busy=true;btns.forEach(function(x){x.disabled=true});say('Sending '+emoji+'...',1500);
+    send(kind,emoji).then(function(d){
+      if(!TEST)set(kind);
+      fly(b,emoji);
+      if(TEST){btns.forEach(function(x){x.disabled=false});say('Sent '+emoji+' (test) - check '+EMAIL,3500)}
+      else{lock(kind);say('Thanks! Sent '+emoji+' to Clarence')}
     }).catch(function(err){
-      /* failed -> do NOT lock, so the visitor can try again */
       btns.forEach(function(x){x.disabled=false});
       var m=(err&&err.fs)||'';
-      if(/activat/i.test(m))say('Hindi pa activated ang email ni Clarence (FormSubmit). Check inbox/spam niya.',5000);
-      else say('Hindi na-send'+(m?': '+m:'. Try again.'),4000);
+      if(/activat/i.test(m))say('Hindi pa activated ang email (FormSubmit). Check inbox/spam.',5000);
+      else say('Hindi na-send'+(m?': '+m:'. Try again.'),4500);
+      log('ERROR: '+(err&&err.message||err)+'\n(Kung "Failed to fetch": naka-block ng adblock/Brave shields o walang internet.)',true);
       console.warn('Reaction send failed:',err);
     }).then(function(){busy=false});
   });
