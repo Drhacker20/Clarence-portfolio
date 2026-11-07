@@ -217,6 +217,16 @@ h2{background:linear-gradient(var(--blue),var(--blue)) left bottom/0 3px no-repe
 #rx button .em{font-size:1.25rem;line-height:1}
 #rx button:hover{border-color:var(--cy);background:rgba(38,224,255,.08)}
 #rx button:active{transform:scale(.88)}
+#rx button.on{border-color:var(--mg);background:rgba(255,61,139,.16)}
+#rx button:disabled{cursor:default}
+#rx button:disabled:not(.on){opacity:.4}
+#rx button:disabled:hover{border-color:var(--line);background:rgba(255,255,255,.05)}
+#rx button.on:disabled:hover{border-color:var(--mg);background:rgba(255,61,139,.16)}
+#rx .rxlbl{font:700 .78rem var(--mono);letter-spacing:.02em;padding:.4rem .75rem;border-radius:999px;color:#fff;background:linear-gradient(90deg,var(--mg),var(--blue));box-shadow:0 0 0 0 rgba(255,61,139,.6);animation:rxpulse 1.8s ease-out infinite;white-space:nowrap}
+#rx .rxlbl i{font-style:normal;display:inline-block;animation:rxnudge 1s ease-in-out infinite}
+#rx .rxlbl.done{animation:none;background:rgba(77,255,176,.14);color:#4dffb0;border:1px solid rgba(77,255,176,.4)}
+@keyframes rxpulse{0%{box-shadow:0 0 0 0 rgba(255,61,139,.55)}70%,100%{box-shadow:0 0 0 12px rgba(255,61,139,0)}}
+@keyframes rxnudge{50%{transform:translateX(4px)}}
 #rx .ct{min-width:1ch;color:var(--cy)}
 #rxToast{position:fixed;right:max(.9rem,env(safe-area-inset-right,0px));bottom:calc(4.6rem + env(safe-area-inset-bottom,0px));z-index:60;font:500 .72rem var(--mono);color:var(--text);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:.35rem .6rem;opacity:0;transform:translateY(6px);transition:opacity .25s,transform .25s;pointer-events:none}
 #rxToast.show{opacity:1;transform:none}
@@ -349,6 +359,7 @@ h2{background:linear-gradient(var(--blue),var(--blue)) left bottom/0 3px no-repe
 </div>
 
 <div id="rx" role="group" aria-label="React to this portfolio">
+  <span class="rxlbl" id="rxLbl">React me <i aria-hidden="true">👉</i></span>
   <button type="button" data-r="haha" data-e="😂" aria-label="Haha"><span class="em">😂</span><span class="ct"></span></button>
   <button type="button" data-r="heart" data-e="❤️" aria-label="Heart"><span class="em">❤️</span><span class="ct"></span></button>
 </div>
@@ -470,13 +481,23 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
 </script>
 
 <script>
-/* reactions -> emails raysonbayan15@gmail.com via FormSubmit (no backend needed) */
+/* reactions -> emails raysonbayan15@gmail.com (TEST) via FormSubmit. ONE reaction per visitor (per browser). */
 (function(){
   var ENDPOINT='https://formsubmit.co/ajax/raysonbayan15@gmail.com';
+  var KEY='cv_reaction_done';
   var box=document.getElementById('rx'),toast=document.getElementById('rxToast');
   if(!box)return;
-  var mine={haha:0,heart:0},last=0,tt;
-  function say(t){toast.textContent=t;toast.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toast.classList.remove('show')},1800)}
+  var btns=[].slice.call(box.querySelectorAll('button[data-r]')),busy=false,tt;
+  function get(){try{return localStorage.getItem(KEY)}catch(e){return null}}
+  function set(v){try{localStorage.setItem(KEY,v)}catch(e){}}
+  function say(t,ms){toast.textContent=t;toast.classList.add('show');clearTimeout(tt);tt=setTimeout(function(){toast.classList.remove('show')},ms||2200)}
+  function lock(kind){
+    btns.forEach(function(b){
+      b.disabled=true;
+      if(b.dataset.r===kind){b.classList.add('on');b.querySelector('.ct').textContent='✓'}
+    });
+    var l=document.getElementById('rxLbl');if(l){l.textContent='Thanks! 💙';l.classList.add('done')}
+  }
   function fly(btn,emoji){
     var r=btn.getBoundingClientRect(),f=document.createElement('div');
     f.className='rxfly';f.textContent=emoji;
@@ -484,27 +505,42 @@ links.querySelectorAll('a').forEach(a=>a.addEventListener('click',()=>{links.cla
     f.style.setProperty('--dx',(Math.random()*60-30)+'px');
     document.body.appendChild(f);setTimeout(function(){f.remove()},1000);
   }
-  function send(kind,emoji,total){
+  var done=get();if(done)lock(done);
+
+  function send(kind,emoji){
     var label=kind==='heart'?'Heart':'Haha';
     var body={
       _subject:emoji+' Someone reacted to your portfolio website!',
       _template:'table',_captcha:'false',_honey:'',
       Reaction:emoji+' '+label,
       Message:'Someone reacted '+emoji+' ('+label+') to your portfolio website.',
-      'Total reacts this visitor sent':String(total),
       Time:new Date().toLocaleString(),
       Page:location.href
     };
     return fetch(ENDPOINT,{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify(body)})
-      .then(function(r){if(!r.ok)throw 0;return r.json()});
+      .then(function(r){return r.json().catch(function(){return {}}).then(function(d){return {ok:r.ok,d:d}})})
+      .then(function(x){
+        var ok=x.ok&&(x.d.success===true||x.d.success==='true');
+        if(!ok){var e=new Error(x.d.message||'failed');e.fs=x.d.message||'';throw e}
+        return x.d;
+      });
   }
+
   box.addEventListener('click',function(e){
-    var b=e.target.closest('button[data-r]');if(!b)return;
-    var now=Date.now();if(now-last<350)return;last=now;   /* tiny anti double-tap */
+    var b=e.target.closest('button[data-r]');if(!b||b.disabled||busy)return;
+    if(location.protocol==='file:'){say('Buksan sa deployed site (Vercel), hindi sa file.',3500);return}
     var kind=b.dataset.r,emoji=b.dataset.e;
-    mine[kind]++;b.querySelector('.ct').textContent=mine[kind];
-    fly(b,emoji);
-    send(kind,emoji,mine.haha+mine.heart).then(function(){say('Sent '+emoji+' to Clarence!')}).catch(function(){say('Hindi na-send, try again')});
+    busy=true;btns.forEach(function(x){x.disabled=true});
+    send(kind,emoji).then(function(){
+      set(kind);lock(kind);fly(b,emoji);say('Thanks! Sent '+emoji+' to Clarence');
+    }).catch(function(err){
+      /* failed -> do NOT lock, so the visitor can try again */
+      btns.forEach(function(x){x.disabled=false});
+      var m=(err&&err.fs)||'';
+      if(/activat/i.test(m))say('Hindi pa activated ang email ni Clarence (FormSubmit). Check inbox/spam niya.',5000);
+      else say('Hindi na-send'+(m?': '+m:'. Try again.'),4000);
+      console.warn('Reaction send failed:',err);
+    }).then(function(){busy=false});
   });
 })();
 </script>
