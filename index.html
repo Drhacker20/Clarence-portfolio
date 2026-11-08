@@ -380,7 +380,7 @@ const CERTS=[
 /* profile photo: sits above the "CV" fallback; fallback only stays if the image fails */
 const pimg=document.getElementById('profileImg');
 pimg.addEventListener('error',()=>pimg.remove());
-pimg.src=IMG.profile;pimg.classList.add('show');
+pimg.src='profile.jpg';pimg.classList.add('show');
 /* certificates */
 const grid=document.getElementById('certGrid');
 CERTS.forEach(c=>{
